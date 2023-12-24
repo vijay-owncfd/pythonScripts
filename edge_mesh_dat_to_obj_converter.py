@@ -74,11 +74,13 @@ def create_obj_file(file_path, numPoints, dat_vertex, coordX, coordY, coordZ, nu
             
     return obj_file_path
 
-# Example usage:
-file_path = sys.argv[1]
-numPoints, dat_vertex, coordX, coordY, coordZ, numEdges, dat_line_start, dat_line_end = read_dat_file(file_path)
+# Loop over all the .dat files
+numFiles = len(sys.argv)
 
-# Create the .obj file
-obj_file_path = create_obj_file(file_path, numPoints, dat_vertex, coordX, coordY, coordZ, numEdges, dat_line_start, dat_line_end)
-
-print(f"Conversion completed. The .obj file has been created: {obj_file_path}")
+for i in range(1, numFiles):	
+    file_path = sys.argv[i]
+    numPoints, dat_vertex, coordX, coordY, coordZ, numEdges, dat_line_start, dat_line_end = read_dat_file(file_path)
+	
+    # Create the .obj file
+    obj_file_path = create_obj_file(file_path, numPoints, dat_vertex, coordX, coordY, coordZ, numEdges, dat_line_start, dat_line_end)
+    print(f"The .obj file has been created: {obj_file_path}")
