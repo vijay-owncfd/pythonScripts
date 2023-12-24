@@ -3,6 +3,7 @@
 # .dat can be generated with Salome
 # OpenFOAM's snappyHexMesh can read .obj 
 
+import sys
 import datetime
 
 # Function to read the .dat file containing the edge mesh information.
@@ -74,7 +75,7 @@ def create_obj_file(file_path, numPoints, dat_vertex, coordX, coordY, coordZ, nu
     return obj_file_path
 
 # Example usage:
-file_path = input("Enter the path to the *.dat file: ")
+file_path = sys.argv[1]
 numPoints, dat_vertex, coordX, coordY, coordZ, numEdges, dat_line_start, dat_line_end = read_dat_file(file_path)
 
 # Create the .obj file
