@@ -1,7 +1,7 @@
 This utility converts edge meshes in .dat format to .obj format
 .obj can be used in snappyHexMesh and also can be opened in paraview
 
-Usage:
+**Usage:**
 - There are two .dat files in the sampleDATfiles folder.
 
 - Run the following command
