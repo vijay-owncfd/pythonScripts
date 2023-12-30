@@ -1,5 +1,5 @@
 **Usage:** 
-generateBackgroundMesh.py [-h] -stlPath STLPATH -dx DX -dy DY -dz DZ
+generateBackgroundMesh.py -stlPath STLPATH -dx DX -dy DY -dz DZ
 
 **Description:**
 Generate the background mesh for snappyHexMesh based on a given stl file and the base grid sizes in coordinate directions. Note: Base grid sizes should be positive values only.
