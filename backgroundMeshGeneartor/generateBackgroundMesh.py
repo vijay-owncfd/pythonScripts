@@ -1,10 +1,10 @@
+#!/usr/bin/env python3
 """
 Filename: generateBackgroundMesh.py
 Author: G. Vijaya Kumar
 Date: December 30, 2023
 Description: Generate the background mesh for snappyHexMesh based on a given stl file and the base grid sizes in coordinate directions.
 """
-#!/usr/bin/env python3
 
 import subprocess
 import re

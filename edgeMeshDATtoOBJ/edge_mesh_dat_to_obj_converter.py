@@ -1,7 +1,10 @@
-# Developed by G. Vijaya Kumar on 24th December 2023
-# This utility converts an edge mesh in .dat format to .obj format
-# .dat can be generated with Salome
-# OpenFOAM's snappyHexMesh can read .obj 
+#!/usr/bin/env python3
+"""
+Developed by G. Vijaya Kumar on 24th December 2023
+This utility converts an edge mesh in .dat format to .obj format
+.dat can be generated with Salome
+OpenFOAM's snappyHexMesh can read .obj 
+"""
 
 import sys
 import datetime
