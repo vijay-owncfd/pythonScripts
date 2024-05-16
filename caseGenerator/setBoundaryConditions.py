@@ -316,7 +316,6 @@ else:
 
 
 #-----------------------------------------------------------------------------------------------------------
-'''
 # Set initial conditions
 print("Setting initial conditions..\n")
 # initial condition - velocity
@@ -351,7 +350,6 @@ if(turbulence_model_type=="RAS"):
     if(simulation_mode==2):
         alphat_init = float(input("Enter initial Turbulent thermal diffusivity in kg/m/s (typically 1e-10): "))
         run_command(f"foamDictionary 0/alphat -entry internalField -set \"uniform {alphat_init}\"")
-'''    
 #-----------------------------------------------------------------------------------------------------------
     
 boundary_list = subprocess.run("foamDictionary constant/polyMesh/boundary -entry entry0 -keywords", shell=True, check=True, text=True, stdout=subprocess.PIPE)
