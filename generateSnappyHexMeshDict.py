@@ -195,6 +195,9 @@ try:
     
     surface_files=[]
     edge_files=[]
+    geometry_region_names = []  # contains region names in the geometry sub-dictionary of snappyHexMeshDict
+    region_zone_list = []       # containes zone names inside the geometry regions 
+
     try:
         surface_indices = [int(num) for num in surface_input.split()]
         edge_indices = [int(num) for num in edge_input.split()]
@@ -209,22 +212,56 @@ try:
         print("Invalid input. Please ensure you enter valid numbers corresponding to the file list.")
 
     for ii in range(len(surface_files)):
-        surface_file_path = os.path.join(geometry_folder, surface_files[ii])
-        stl_region_name = os.path.splitext(surface_files[ii])[0]    # removing suffix .stl
-        print(ii)
-        print(stl_region_name)
+        stl_region_name = os.path.splitext(surface_files[ii])[0] # removing suffix .stl
         execute_command("foamDictionary system/snappyHexMeshDict -entry geometry/"+surface_files[ii]+" -add \"{}\"")
         execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{surface_files[ii]}/type -add triSurfaceMesh")
         execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{surface_files[ii]}/name -add {stl_region_name}")
+        surface_file_path = os.path.join(geometry_folder, surface_files[ii])
         zone_names = get_stl_zone_names(surface_file_path)
-        print(zone_names)
         num_zones = len(zone_names)
         if(num_zones > 1):
             execute_command("foamDictionary system/snappyHexMeshDict -entry geometry/"+surface_files[ii]+"/regions"+" -add \"{}\"")
             for jj in range(num_zones):
                 execute_command("foamDictionary system/snappyHexMeshDict -entry geometry/"+surface_files[ii]+"/regions/"+zone_names[jj]+" -add \"{}\"")
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{surface_files[ii]}/regions/{zone_names[jj]}/name -add {zone_names[jj]}")
-            
+        geometry_region_names.append(stl_region_name)    
+        region_zone_list.append(zone_names)
+    
+    num_special_regions = int(input("Enter the number of standard shapes required for refinement/cellZones: "))
+    special_region_name = []
+    for ii in range(num_special_regions):
+        special_region_name.append("special_region_"+str(ii))
+        special_region_type = int(input("Available shapes are\n1 (box)\n2 (cylindrical)\n3 (sphere)\nEnter the type: "))
+        execute_command("foamDictionary system/snappyHexMeshDict -entry geometry/"+special_region_name[ii]+" -add \"{}\"")
+        if(special_region_type == 1):
+            min_point = get_vector("Enter box's min point ")
+            max_point = get_vector("Enter box's max point ")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/type -add searchableBox")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/min -add \"{min_point}\"")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/max -add \"{max_point}\"")
+        elif(special_region_type == 2):
+            center_point_1 = get_vector("Enter axis starting point ")
+            outer_radius_1 = float(input("Outer radius at axis start: "))
+            inner_radius_1 = float(input("Inner radius at axis start: "))
+            center_point_2 = get_vector("Enter axis ending point ")
+            outer_radius_2 = float(input("Outer radius at axis start: "))
+            inner_radius_2 = float(input("Inner radius at axis start: "))
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/type -add searchableCone")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/point1 -add \"{center_point_1}\"")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/radius1 -add {outer_radius_1}")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/innerRadius1 -add {inner_radius_1}")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/point2 -add \"{center_point_2}\"")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/radius2 -add {outer_radius_2}")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/innerRadius2 -add {inner_radius_2}")
+        elif(special_region_type == 3):
+            centre = get_vector("Centre of the sphere ")
+            radius = float(input("Radius of the sphere: "))
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/type -add searchableSphere")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/centre -add \"{centre}\"")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry geometry/{special_region_name[ii]}/radius -add {radius}")
+        else:
+            sys.exit("Invalid choice!")
+        
     #--------------------------------
     # castellatedMeshControls section
     #--------------------------------
