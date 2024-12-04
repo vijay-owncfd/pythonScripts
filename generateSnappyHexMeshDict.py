@@ -231,6 +231,7 @@ try:
     special_region_name = []
     for ii in range(num_special_regions):
         special_region_name.append("special_region_"+str(ii))
+        print(f"Details of shape {ii+1}:")
         special_region_type = int(input("Available shapes are\n1 (box)\n2 (cylindrical)\n3 (sphere)\nEnter the type: "))
         execute_command("foamDictionary system/snappyHexMeshDict -entry geometry/"+special_region_name[ii]+" -add \"{}\"")
         if(special_region_type == 1):
@@ -351,6 +352,28 @@ try:
         execute_command("foamDictionary system/snappyHexMeshDict -entry snapControls/explicitFeatureSnap -add false")
         execute_command("foamDictionary system/snappyHexMeshDict -entry snapControls/multiRegionFeatureSnap -add false")
     
+    #--------------------------------
+    # meshQualityControls section
+    #--------------------------------
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/maxNonOrtho -add 65")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/maxBoundarySkewness -add 20")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/maxInternalSkewness -add 4")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/maxConcave -add 80")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minFlatness -add 0.5")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minVol -add 1e-13")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minTetQuality -add -1e-30")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minArea -add -1")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minTwist -add 0.02")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minDeterminant -add 0.001")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minFaceWeight -add 0.05")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minVolRatio -add 0.01")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minTriangleTwist -add -1")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/minEdgeLength -add -1")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/relaxed -add \"{}\"")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/relaxed/maxNonOrtho -add 70")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/nSmoothScale -add 4")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry meshQualityControls/errorReduction -add 0.75")
+
     print(f"File '{snappy_hex_mesh_dict_file}' generation succesfull.")
 except FileNotFoundError as e:
     print(e)
