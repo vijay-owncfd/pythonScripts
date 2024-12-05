@@ -124,6 +124,52 @@ def get_stl_zone_names(stl_file_path):
     except Exception as e:
         return f"An error occurred: {e}"
 
+def get_min_max(prompt):
+    """
+    Prompt the user with a custom message to enter two integers separated by a space 
+    and return them as min and max values.
+    
+    :param prompt: Custom prompt message for the user.
+    :return: A tuple (min_val, max_val) if valid input, or None if invalid.
+    """
+    min_max_input = input(prompt)
+
+    try:
+        min_val, max_val = map(int, min_max_input.split())
+        return min_val, max_val
+    except ValueError:
+        print("Invalid input. Please enter two integers separated by a space.")
+        return None
+
+def get_boundary_type():
+    """
+    Prompt the user for an integer and return two corresponding strings based on the input.
+    :return: A tuple of two strings or an error message.
+    """
+    single_mapping = {
+        1: "wall",
+        2: "patch",
+        3: "faceZone"
+    }
+
+    plural_mapping = {
+        1: "walls",
+        2: "patches",
+        3: "faceZones"
+    }
+
+    try:
+        user_input = int(input("Enter boundary type: 1 (wall) or 2 (patch) or 3 (faceZone): "))
+        single_result = single_mapping.get(user_input, "Invalid input")
+        plural_result = plural_mapping.get(user_input, "Invalid input")
+
+        if single_result == "Invalid input":
+            return "Invalid input"
+        return single_result, plural_result
+
+    except ValueError:
+        return "Invalid input. Please enter an integer."
+
 # Define the system folder and required files
 system_folder = "system"
 control_dict_file = os.path.join(system_folder, "controlDict")
@@ -332,14 +378,66 @@ try:
     for ii in range(len(combined_region_names)):
         ref_level = 0
         if combined_region_names[ii] in volume_refinement_region_names:
-            ref_level = int(input(f"Enter refinement level inside {combined_region_names[ii]}: "))
+            ref_level = int(input(f"Enter volume refinement level inside \"{combined_region_names[ii]}\": "))
         execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/"+combined_region_names[ii]+" -add \"{}\"")
         execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{combined_region_names[ii]}/mode -add inside")
         execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{combined_region_names[ii]}/levels -add \"((1.0 {ref_level}))\"")
-    
+ 
+    #------------refinementRegions -> gap refinement-----------------#
+    for ii in range(len(geometry_region_names)):
+        gap_refinement = get_boolean_input(f"Resolve small gaps with a finer refinement level in {geometry_region_names[ii]} ? ")
+        if gap_refinement:
+            num_gap_cells = int(input("Enter the minimum number of cells between two surfaces forming a gap (3 (minimum), 4 (recommended): "))   
+            level_start = int(input("Grid level at which to start detecting the gaps (usually 0): "))
+            max_ref_level = int(input("Maximum allowed refinement level to resolve gaps: "))
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{geometry_region_names[ii]}/gapLevel -add \"({num_gap_cells} {level_start} {max_ref_level})\"")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{geometry_region_names[ii]}/gapMode -add mixed")
+
     #---------refinementSurfaces-------#
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces -add \"{}\"")
+    
+    standalone_surfaces = []
+    for ii in range(len(geometry_region_names)):
+        zone_names = region_zone_list[ii]
+        if(len(zone_names) > 1):
+            execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+" -add \"{}\"")
+            min_level, max_level = get_min_max(f"Enter the global surface refinement levels for \"{geometry_region_names[ii]}\"- min max: ")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/level -add \"({min_level} {max_level})\"")
+            execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions"+" -add \"{}\"")
+            for jj in range(len(zone_names)):
+                execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions/"+zone_names[jj]+" -add \"{}\"")
+                min_level, max_level = get_min_max(f"Enter local surface refinement levels for the boundary \"{zone_names[jj]}\"- min max: ") 
+                boundary_type, group_type = get_boundary_type()
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/regions/{zone_names[jj]}/level -add \"({min_level} {max_level})\"")
+                execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions/"+zone_names[jj]+"/patchInfo"+" -add \"{}\"")
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/regions/{zone_names[jj]}/patchInfo/type -add {boundary_type}")
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/regions/{zone_names[jj]}/patchInfo/inGroups -add \"({group_type})\"")
+                
+        else:
+            standalone_surfaces.append(geometry_region_names[ii])
+     
+    # concatenate single zone regions of geometry_region_names and special_region_names
+    standalone_surfaces.extend(special_region_names)
 
+    for ii in range(len(standalone_surfaces)):
+        if get_boolean_input(f"Do you want to define surface refinement levels and/or patch/wall/faceZone definitions for \"{standalone_surfaces[ii]}\" ?"):
+            min_level, max_level = get_min_max(f"Enter surface refinement levels for surface \"{standalone_surfaces[ii]}\"- min max: ")
+            boundary_type, group_type = get_boundary_type()
+            execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+standalone_surfaces[ii]+" -add \"{}\"")
+            execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/level -add \"({min_level} {max_level})\"")
+            if (boundary_type == "wall" or boundary_type == "patch"):
+                execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+standalone_surfaces[ii]+"/patchInfo"+" -add \"{}\"")
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/patchInfo/type -add {boundary_type}")
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/patchInfo/inGroups -add \"({group_type})\"")
+            if boundary_type == "faceZone":
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/faceZone -add {standalone_surfaces[ii]}")
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/faceType -add internal")
+                if get_boolean_input(f"Whether the faceZone \"{standalone_surfaces[ii]}\" enclose a cellZone? "):
+                    cell_zone_name = input("Enter name of the cellZone? ")
+                    execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/cellZone -add {cell_zone_name}")
+                    execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/cellZoneInside -add inside")
+    
+       
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/resolveFeatureAngle -add 30")
     
     print("Enter the number of cells between mesh levels...")
@@ -355,7 +453,7 @@ try:
     location_in_mesh = get_vector("Enter a point (region to keep): ")
     execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/locationInMesh -add \"{location_in_mesh}\"")
     
-    execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/allowFreeStandingZoneFaces -add false")
+    execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/allowFreeStandingZoneFaces -add true")
 
     #--------------------------------
     # snapControls section
@@ -383,6 +481,11 @@ try:
         execute_command("foamDictionary system/snappyHexMeshDict -entry snapControls/explicitFeatureSnap -add false")
         execute_command("foamDictionary system/snappyHexMeshDict -entry snapControls/multiRegionFeatureSnap -add false")
     
+    #-------------------------------------------
+    # Layer addition
+    #-----------------------------------------
+    # if add_boundary_layers:
+        
     #--------------------------------
     # meshQualityControls section
     #--------------------------------
