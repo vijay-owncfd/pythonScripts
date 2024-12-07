@@ -10,6 +10,13 @@ Instructions:
 1. The OpenFOAM environment should be sourced first
 2. The surface files should be in .stl file
 3. Edge files can be all supported OpenFOAM formats
+4. If you want a separate cellZone (or region for CHT), it should be from a 
+   separate stl file with the correct normal orientations.
+5. Only finalAndExpansion mode is supported now for layer addition
+6. Only the meshShrinker :displacementMotionSolver is allowed and all necessary
+    settings, fvSchemes and fvSolution files will be automatically created.
+7. For multiregion setups, choose the patch wisely for layer addition
+    e.g., based on the stl orientation it can be just <name> or <name>_slave
 """
 
 import os
@@ -170,6 +177,32 @@ def get_boundary_type():
     except ValueError:
         return "Invalid input. Please enter an integer."
 
+def write_file(directory, filename, content):
+    """
+    Create or overwrite a file in the specified directory with the given content.
+    
+    :param directory: The directory where the file should be created.
+    :param filename: The name of the file to create or overwrite.
+    :param content: The content to write into the file.
+    """
+    # Construct the full file path
+    file_path = os.path.join(directory, filename)
+
+    # Check if the directory exists
+    if not os.path.exists(directory):
+        print(f"Error: The directory '{directory}' does not exist.")
+        return
+
+    # Inform the user about overwriting if the file exists
+    if os.path.exists(file_path):
+        print(f"The file '{file_path}' already exists and will be overwritten.")
+
+    # Write the content to the file
+    with open(file_path, "w") as file:
+        file.write(content)
+
+    print(f"The file '{file_path}' has been created/overwritten successfully.")
+
 # Define the system folder and required files
 system_folder = "system"
 control_dict_file = os.path.join(system_folder, "controlDict")
@@ -277,7 +310,7 @@ try:
         combined_region_names.append(stl_region_name)
         region_zone_list.append(zone_names)
     
-    num_special_regions = int(input("Enter the number of additional standard shapes for volume refinement or separate cellZones: "))
+    num_special_regions = int(input("Enter the number of additional standard shapes for volume refinement or separate cellZones (0 for no extra shapes): "))
     for ii in range(num_special_regions):
         special_region_names.append("shape_"+str(ii+1))
         combined_region_names.append("shape_"+str(ii+1))
@@ -385,7 +418,7 @@ try:
  
     #------------refinementRegions -> gap refinement-----------------#
     for ii in range(len(geometry_region_names)):
-        gap_refinement = get_boolean_input(f"Resolve small gaps with a finer refinement level in {geometry_region_names[ii]} ? ")
+        gap_refinement = get_boolean_input(f"Resolve small gaps with a finer refinement level in \"{geometry_region_names[ii]}\" ? ")
         if gap_refinement:
             num_gap_cells = int(input("Enter the minimum number of cells between two surfaces forming a gap (3 (minimum), 4 (recommended): "))   
             level_start = int(input("Grid level at which to start detecting the gaps (usually 0): "))
@@ -397,6 +430,7 @@ try:
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces -add \"{}\"")
     
     standalone_surfaces = []
+    layer_surfaces = [] # boundary names for layer addition process
     for ii in range(len(geometry_region_names)):
         zone_names = region_zone_list[ii]
         if(len(zone_names) > 1):
@@ -412,6 +446,7 @@ try:
                 execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions/"+zone_names[jj]+"/patchInfo"+" -add \"{}\"")
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/regions/{zone_names[jj]}/patchInfo/type -add {boundary_type}")
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/regions/{zone_names[jj]}/patchInfo/inGroups -add \"({group_type})\"")
+                layer_surfaces.append(zone_names[jj])
                 
         else:
             standalone_surfaces.append(geometry_region_names[ii])
@@ -429,6 +464,7 @@ try:
                 execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+standalone_surfaces[ii]+"/patchInfo"+" -add \"{}\"")
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/patchInfo/type -add {boundary_type}")
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/patchInfo/inGroups -add \"({group_type})\"")
+                layer_surfaces.append(standalone_surfaces[ii])
             if boundary_type == "faceZone":
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/faceZone -add {standalone_surfaces[ii]}")
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/faceType -add internal")
@@ -436,6 +472,8 @@ try:
                     cell_zone_name = input("Enter name of the cellZone? ")
                     execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/cellZone -add {cell_zone_name}")
                     execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{standalone_surfaces[ii]}/cellZoneInside -add inside")
+                layer_surfaces.append(standalone_surfaces[ii])
+                layer_surfaces.append(standalone_surfaces[ii]+"_slave")     # For layer addition, both sides of a faceZone has to be put into the patch list
     
        
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/resolveFeatureAngle -add 30")
@@ -484,7 +522,97 @@ try:
     #-------------------------------------------
     # Layer addition
     #-----------------------------------------
-    # if add_boundary_layers:
+    if add_boundary_layers:
+        print("\n===========================================")
+        print("Boundary layer settings")
+        print("===========================================")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/relativeSizes -add true")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/minThickness -add 0.1")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/featureAngle -add 120")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nGrow -add 0")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/maxFaceThicknessRatio -add 0.5")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nBufferCellsNoExtrude -add 0")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nLayerIter -add 50")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nSmoothThickness -add 10")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nRelaxIter -add 5")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nRelaxedIter -add 20")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/nSmoothSurfaceNormals -add 1")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/thicknessModel -add finalAndExpansion")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/finalLayerThickness -add 0.5")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/expansionRatio -add 1.1")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/layers -add \"{}\"")
+        
+        print("The boundaries/faceZones available for prism layer addition are")
+        print(layer_surfaces)
+
+        patch_list = "( "
+        for ii in range(len(layer_surfaces)):
+            if get_boolean_input(f"\nAdd boundary layers normal to the patch \"{layer_surfaces[ii]}\" ?"):
+                patch_list = patch_list + layer_surfaces[ii] + " "
+                num_layers = int(input("Enter number of boundary layers for this patch? "))
+                execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/layers/"+layer_surfaces[ii]+" -add \"{}\"")
+                execute_command(f"foamDictionary system/snappyHexMeshDict -entry addLayersControls/layers/{layer_surfaces[ii]}/nSurfaceLayers -add {num_layers}")
+            else:
+                print(f"Skipping boundary layers generation for patch \"{layer_surfaces[ii]}\"")
+        patch_list = patch_list + ");"
+
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/meshShrinker -add displacementMotionSolver")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/solver -add displacementLaplacian")
+        text_string = "{ diffusivity quadratic inverseDistance "+ patch_list +" }"
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/displacementLaplacianCoeffs"+" -add \""+text_string+"\"")
+        
+        # write fvSchemes and fvSolution files necessary for layer addition
+        content = """\
+FoamFile
+{
+    version         2;
+    format          ascii;
+    class           dictionary;
+    object          fvSchemes;
+}
+
+divSchemes
+{
+
+}
+
+gradSchemes
+{
+    grad(cellDisplacement)  cellLimited leastSquares 1;
+
+}
+
+laplacianSchemes
+{
+    laplacian(diffusivity,cellDisplacement) Gauss linear limited corrected 0.5;
+}
+
+"""
+        write_file(system_folder, "fvSchemes", content)
+    
+        content = """\
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+
+solvers
+{
+   cellDisplacement
+   {
+       solver          GAMG;
+       smoother        GaussSeidel;
+       minIter         1;
+       tolerance       1e-7;
+       relTol          0.01;
+   }
+}
+
+"""
+        write_file(system_folder, "fvSolution", content)
+        
         
     #--------------------------------
     # meshQualityControls section
