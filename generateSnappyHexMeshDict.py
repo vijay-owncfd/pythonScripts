@@ -31,9 +31,7 @@ def execute_command(command):
     """
     try:
         result = subprocess.run(command, text=True, capture_output=True, shell=True)
-        if result.returncode == 0:
-            print(result.stdout)
-        else:
+        if not (result.returncode == 0):
             print("Command failed with error:")
             print(result.stderr)
     except FileNotFoundError:
@@ -242,13 +240,7 @@ try:
     
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMesh -add true")
     execute_command("foamDictionary system/snappyHexMeshDict -entry snap -add true")
-    
-    add_boundary_layers = get_boolean_input("Add boundary layers?")
-
-    if add_boundary_layers:
-        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayers -add true")
-    else:
-        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayers -add false")
+    execute_command("foamDictionary system/snappyHexMeshDict -entry addLayers -add false")
 
     execute_command("foamDictionary system/snappyHexMeshDict -entry geometry -add \"{}\"")
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls -add \"{}\"")
@@ -258,9 +250,9 @@ try:
 
     execute_command("foamDictionary system/snappyHexMeshDict -entry mergeTolerance -add 1e-6")
     
-    #--------------------------------
-    # geometry section
-    #--------------------------------
+    print("\n===========================================")
+    print("Geometry inputs")
+    print("===========================================")
     geometry_folder = "constant/triSurface"
     geom_files = list_files(geometry_folder)
     
@@ -310,7 +302,7 @@ try:
         combined_region_names.append(stl_region_name)
         region_zone_list.append(zone_names)
     
-    num_special_regions = int(input("Enter the number of additional standard shapes for volume refinement or separate cellZones (0 for no extra shapes): "))
+    num_special_regions = int(input("\nEnter the number of additional standard shapes for volume refinement or separate cellZones (0 for no extra shapes): "))
     for ii in range(num_special_regions):
         special_region_names.append("shape_"+str(ii+1))
         combined_region_names.append("shape_"+str(ii+1))
@@ -355,8 +347,15 @@ try:
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/minRefinementCells -add 10")
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/maxLoadUnbalance -add 0.1")
 
+    print("\n===========================================")
+    print("Castellation and refinement related inputs")
+    print("===========================================")
+
     # features - refinement level
     #--------------------------------------------------------------------------------------------------
+    print("\nRefinement settings for feature edges")
+    print("-------------------------------------")
+    
     with open(snappy_hex_mesh_dict_file, "r") as file:
         lines = file.readlines()
     
@@ -391,8 +390,9 @@ try:
     with open(snappy_hex_mesh_dict_file, "w") as file:
         file.writelines(modified_lines)    
 
-    #---------refinementRegion-------#
-    print("\nThe volume regions are ")
+    print("\nVolume refinement")
+    print("-----------------\n")
+    print("The volume regions are ")
     for ii, reg_name in enumerate(combined_region_names, start=1):
         print(f"{ii}. {reg_name}")
 
@@ -415,10 +415,10 @@ try:
         execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/"+combined_region_names[ii]+" -add \"{}\"")
         execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{combined_region_names[ii]}/mode -add inside")
         execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{combined_region_names[ii]}/levels -add \"((1.0 {ref_level}))\"")
- 
+
     #------------refinementRegions -> gap refinement-----------------#
     for ii in range(len(geometry_region_names)):
-        gap_refinement = get_boolean_input(f"Resolve small gaps with a finer refinement level in \"{geometry_region_names[ii]}\" ? ")
+        gap_refinement = get_boolean_input(f"\nResolve small gaps with a finer refinement level in \"{geometry_region_names[ii]}\" ? ")
         if gap_refinement:
             num_gap_cells = int(input("Enter the minimum number of cells between two surfaces forming a gap (3 (minimum), 4 (recommended): "))   
             level_start = int(input("Grid level at which to start detecting the gaps (usually 0): "))
@@ -426,7 +426,8 @@ try:
             execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{geometry_region_names[ii]}/gapLevel -add \"({num_gap_cells} {level_start} {max_ref_level})\"")
             execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementRegions/{geometry_region_names[ii]}/gapMode -add mixed")
 
-    #---------refinementSurfaces-------#
+    print("\nSurface refinement")
+    print("------------------")
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces -add \"{}\"")
     
     standalone_surfaces = []
@@ -435,12 +436,12 @@ try:
         zone_names = region_zone_list[ii]
         if(len(zone_names) > 1):
             execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+" -add \"{}\"")
-            min_level, max_level = get_min_max(f"Enter the global surface refinement levels for \"{geometry_region_names[ii]}\"- min max: ")
+            min_level, max_level = get_min_max(f"\nEnter the global surface refinement levels for \"{geometry_region_names[ii]}\"- min max: ")
             execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/level -add \"({min_level} {max_level})\"")
             execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions"+" -add \"{}\"")
             for jj in range(len(zone_names)):
                 execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions/"+zone_names[jj]+" -add \"{}\"")
-                min_level, max_level = get_min_max(f"Enter local surface refinement levels for the boundary \"{zone_names[jj]}\"- min max: ") 
+                min_level, max_level = get_min_max(f"\nEnter local surface refinement levels for the boundary \"{zone_names[jj]}\"- min max: ") 
                 boundary_type, group_type = get_boundary_type()
                 execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/{geometry_region_names[ii]}/regions/{zone_names[jj]}/level -add \"({min_level} {max_level})\"")
                 execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+geometry_region_names[ii]+"/regions/"+zone_names[jj]+"/patchInfo"+" -add \"{}\"")
@@ -455,7 +456,7 @@ try:
     standalone_surfaces.extend(special_region_names)
 
     for ii in range(len(standalone_surfaces)):
-        if get_boolean_input(f"Do you want to define surface refinement levels and/or patch/wall/faceZone definitions for \"{standalone_surfaces[ii]}\" ?"):
+        if get_boolean_input(f"\nDo you want to define surface refinement levels and/or patch/wall/faceZone definitions for \"{standalone_surfaces[ii]}\" ?"):
             min_level, max_level = get_min_max(f"Enter surface refinement levels for surface \"{standalone_surfaces[ii]}\"- min max: ")
             boundary_type, group_type = get_boundary_type()
             execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/refinementSurfaces/"+standalone_surfaces[ii]+" -add \"{}\"")
@@ -478,7 +479,7 @@ try:
        
     execute_command("foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/resolveFeatureAngle -add 30")
     
-    print("Enter the number of cells between mesh levels...")
+    print("\nEnter the number of cells between mesh levels...")
     print("1 - fast transition, low cell count, may cause convergence issues")
     print("2 - balanced transition and cell count (preferred)")
     print("3 - slow transition, high cell count, robust")
@@ -488,7 +489,7 @@ try:
 
     # castellatedMeshControls --> features section
     
-    location_in_mesh = get_vector("Enter a point (region to keep): ")
+    location_in_mesh = get_vector("\nEnter a point to select the mesh region to be retained (as x y z): ")
     execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/locationInMesh -add \"{location_in_mesh}\"")
     
     execute_command(f"foamDictionary system/snappyHexMeshDict -entry castellatedMeshControls/allowFreeStandingZoneFaces -add true")
@@ -503,7 +504,7 @@ try:
     execute_command("foamDictionary system/snappyHexMeshDict -entry snapControls/nRelaxIter -add 5")
     execute_command("foamDictionary system/snappyHexMeshDict -entry snapControls/nFeatureSnapIter -add 10")
 
-    feature_snap_type = int(input("Type of snapping feature edges: explicit (1) or implicit (0) ? "))
+    feature_snap_type = int(input("\nType of snapping feature edges: explicit (1) or implicit (0) ? "))
 
     if(feature_snap_type == 1):
         if(len(edge_files) > 0):
@@ -522,10 +523,11 @@ try:
     #-------------------------------------------
     # Layer addition
     #-----------------------------------------
-    if add_boundary_layers:
+    if get_boolean_input("\nAdd boundary layers?"):
         print("\n===========================================")
         print("Boundary layer settings")
         print("===========================================")
+        execute_command("foamDictionary system/snappyHexMeshDict -entry addLayers -set true")
         execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/relativeSizes -add true")
         execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/minThickness -add 0.1")
         execute_command("foamDictionary system/snappyHexMeshDict -entry addLayersControls/featureAngle -add 120")
